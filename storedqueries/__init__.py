@@ -2,7 +2,6 @@
 from __future__ import unicode_literals, absolute_import
 from collections import namedtuple
 
-from django.apps import apps
 from django.core.exceptions import ImproperlyConfigured
 from django.db.backends.base.base import BaseDatabaseWrapper
 from django.db.backends.base.schema import BaseDatabaseSchemaEditor
@@ -16,17 +15,7 @@ except ImportError:
     pass
 
 
-__all__ = [
-    "TemporaryTable",
-    "TemporaryTableEditor",
-    "temporary_table",
-    "DatabaseSpecifics",
-    "PostgresSpecifics",
-    "SqliteSpecifics",
-    "MySqlSpecifics",
-    "StatusError",
-    "TemporaryTableEditorStatus",
-]
+__all__ = ["TemporaryTable", "TemporaryTableEditor", "temporary_table", "StatusError"]
 
 
 class TemporaryTable(object):
@@ -35,7 +24,7 @@ class TemporaryTable(object):
     a temporary table accessible as an ORM model.
 
     Example:
-
+    ```
     class MyCoolTable(TemporaryTable):
         model = MyCoolModel
         queryset = MyUncoolData.objects.filter(pk__in=(1,3,3,7)).values_list('pk', flat=True).iterator()
@@ -44,25 +33,80 @@ class TemporaryTable(object):
         model = MyCoolModel
         def source_queryset(self):
             return MyUncoolData.objects.filter(created__lt=timezone.now()).values_list('pk', flat=True)
+    ```
+    It may subsequently be accessed like so:
+    ```
+    with MyCoolTable2(name="test") as MyTemporaryCoolModel:
+        data = tuple(MyTemporaryCoolModel.objects.all())
+    ```
+    It can also be passed to a `TemporaryTableEditor`, which does the actual work
+    of turning this object's attributes into a temporary table. See the example
+    usage in the `TemporaryTableEditor` docstring.
     """
 
     model = None  # type: Optional[Model]
     queryset = None  # type: Optional[QuerySet]
     name = None  # type: Optional[Text]
+    _editor = None  # type: Optional[TemporaryTableEditor]
 
     def __init__(self, model=None, queryset=None, name=None):
-        self.model = model
-        self.queryset = queryset
-        self.name = name
+        """
+        When creating an instance of a temporary table, it is possible to swap
+        out any class attributes defined to dynamically change the scope this
+        will work with. Useful mostly for querysets which might depend on the
+        `request.user`, or temporal data (dates/times) etc.
+        """
+        if model is not None:
+            self.model = model
+        if queryset is not None:
+            self.queryset = queryset
+        if name is not None:
+            self.name = name
+        self._editor = None
 
     def target_model(self):
+        """
+        Provide a normal Django `models.Model` subclass which defines all
+        (or a subset of) the columns/attributes which should available after
+        being mapped from the source_queryset.
+        """
         return self.model
 
     def source_queryset(self):
+        """
+        Should return a Django `QuerySet` which will be used for the data in
+        the temporary table.
+        eg: `CREATE TEMPORARY TABLE "example" AS (source_queryset_sql_goes_here);`
+        """
         return self.queryset
 
     def target_name(self):
-        return self.name
+        """
+        Generate a unique name for the temporary table for this "instance" of it.
+        Should be stable for the lifetime of the table, because this method
+        may be called multiple times.
+        """
+        template = "tmp_{!s}_{!s}"
+        unique = id(self)
+        if self.name is not None:
+            return template.format(self.name, unique)
+        model = self.target_model()
+        if model is not None:
+            return template.format(model._meta.db_table, unique)
+        return template.format("unknown_model_name", unique)
+
+    def __enter__(self):
+        self._editor = TemporaryTableEditor(self)
+        temporary_model = self._editor.open()
+        return temporary_model
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._editor.close()
+        # Unbind the reference which was set up, to put this into an invalid
+        # state until entering again ...
+        # We may want to destroy anything in self.__dict__ for model/queryset/name
+        # if it's not also in self.__class__.__dict__ but I'm not sure yet.
+        self._editor = None
 
 
 DatabaseSpecifics = namedtuple("DatabaseSpecifics", ("sql_create", "sql_drop"))
@@ -93,38 +137,42 @@ class TemporaryTableEditor(object):
     Handler for creating and destroying a temporary database table and providing
     a temporary Model class which is backed by said table.
     The exposed implementation is fairly minimal, in that the only methods
-    you might want to call are open() and close()
+    you might want to call are `open()` and `close()`
 
     Tidiest usage (creates and drops the table for you via a context manager):
-
+    ```
     with temporary_table(MyCoolTable()) as MyTemporaryCoolModel:
         data = tuple(MyTemporaryCoolModel.objects.all())
-
+    ```
     Alternative (no context manager):
-        temporary_table = TemporaryTableEditor(MyCoolTable())
-        MyTemporaryCoolModel = temporary_table.open()
-        data = tuple(MyTemporaryCoolModel.objects.all())
-        temporary_table.close()
-
+    ```
+    temporary_table = TemporaryTableEditor(MyCoolTable())
+    MyTemporaryCoolModel = temporary_table.open()
+    data = tuple(MyTemporaryCoolModel.objects.all())
+    temporary_table.close()
+    ```
     Or, with the stdlib closing context manager:
-        temporary_table = TemporaryTableEditor(MyCoolTable())
-        MyTemporaryCoolModel = temporary_table.open()
-        with closing(temporary_table):
-            data = tuple(MyTemporaryCoolModel.objects.all())
-
+    ```
+    temporary_table = TemporaryTableEditor(MyCoolTable())
+    MyTemporaryCoolModel = temporary_table.open()
+    with closing(temporary_table):
+        data = tuple(MyTemporaryCoolModel.objects.all())
+    ```
     To get it to be dropped at the end of the request, you need to add it to
-    the secret _closable_objects API, like so:
-
+    the secret `_closable_objects` API, like so:
+    ```
+    MyTemporaryCoolModel = temporary_table.open()
+    data = tuple(MyTemporaryCoolModel.objects.all())
+    request._closable_objects.append(temporary_table)
+    ```
+    To get it dropped at the end of a transaction, you can do:
+    ```
+    with transaction.atomic():
         MyTemporaryCoolModel = temporary_table.open()
         data = tuple(MyTemporaryCoolModel.objects.all())
-        request._closable_objects.append(temporary_table)
-
-    To get it dropped at the end of a transaction, you can do:
-        with transaction.atomic():
-            MyTemporaryCoolModel = temporary_table.open()
-            data = tuple(MyTemporaryCoolModel.objects.all())
-            transaction.on_commit(temporary_table.close)
-            MyCoolTable.objects.filter(pk=1).update(name='supercool')
+        transaction.on_commit(temporary_table.close)
+        MyCoolTable.objects.filter(pk=1).update(name='supercool')
+    ```
     Though be aware that if the transaction is rolled back, it won't be dropped
     and will be implicitly dropped at the end of the "session" which could be
     much later, and probably could bleed across requests if using MAX_CONN_AGE
@@ -136,18 +184,20 @@ class TemporaryTableEditor(object):
         # type: (TemporaryTable) -> None
         """
         Accepts a TemporaryTable or anything which implements:
-        target_model()
-        source_queryset()
-        target_name()
+        `target_model()`
+        `source_queryset()`
+        `target_name()`
 
         For example, this is a valid input, if you so wish:
-
+        ```
         class X(namedtuple('X', 'm m2')):
             def target_model(self): return self.m
             def target_name(self): return uuid4()
             def source_queryset(self): return self.m2.__class__.objects.filter(pk=1)
         x = X(m=MyCoolData, m2=MyUnCoolDataSource)
-
+        with x as MyTemporaryCoolModel:
+            data = tuple(MyTemporaryCoolModel.objects.all())
+        ```
         They're methods so I can expand them to accept args/kwargs if necessary
         once I establish more use cases. It's possible they'll also turn into
         properties if no more dynamic requirements turn up.
@@ -190,7 +240,7 @@ class TemporaryTableEditor(object):
         # type: (str) -> DatabaseSpecifics
         """
         Given a vendor string, which can be be obtained from the current
-        DatabaseWrapper instance, return the SQL templates necessary for
+        `DatabaseWrapper` instance, return the SQL templates necessary for
         setting up and destroying a temporary table.
         """
         vendors = {
@@ -207,7 +257,7 @@ class TemporaryTableEditor(object):
     def temporary_model(self):
         # type: () -> Type[Model]
         """
-        Returns a subclass of the model defined on the TemporaryTable (or whatever)
+        Returns a subclass of the model defined on the `TemporaryTable` (or whatever)
         whose Meta has been swizzled to be correct for the SQL table we'll be
         making.
         """
@@ -215,24 +265,25 @@ class TemporaryTableEditor(object):
         table_name = self.temporary_table.target_name()
         fake_app = "__temporary_tables_{!s}__".format(table_name)
         fake_model_name = str(klass.__name__ + "TempTable")
-        try:
-            model_cls = apps.get_registered_model(fake_app, fake_model_name)
-            assert model_cls._meta.abstract is False, "Not abstract"
-            assert model_cls._meta.db_table == table_name, "Differing db_table"
-            assert model_cls._meta.app_label == fake_app, "Differing app_label"
-            assert model_cls.__name__ == fake_model_name, "Differing cls name"
-        except (LookupError, AssertionError) as e:
 
-            class Meta:
-                # Has to be False to get a default manager etc...
-                # But then it ends up in apps.register_model() via Model.__new__
-                abstract = False
-                db_table = table_name
-                app_label = fake_app
+        class Meta:
+            # Set it to abstract initially, which allows it to skip preparing
+            # and precludes this temporary model going into the registered models
+            # for this imaginary app label.
+            abstract = True
+            managed = False
+            db_table = table_name
+            app_label = fake_app
 
-            model_cls = type(
-                fake_model_name, (klass,), {"Meta": Meta, "__module__": fake_app}
-            )
+        model_cls = type(
+            fake_model_name, (klass,), {"Meta": Meta, "__module__": fake_app}
+        )
+        # `Model.__new__` has been called, and now we have our type, but it's
+        # incomplete and won't work if it remains abstract, and it needs to
+        # be prepared postfix manually to avoid going into the registered models
+        # for this imaginary app.
+        model_cls._meta.abstract = False
+        model_cls._prepare()
         return model_cls
 
     def open(self):
@@ -243,7 +294,8 @@ class TemporaryTableEditor(object):
         using the migrations package.
 
         Returns a Model for accessing the table, which will only work for the
-        lifetime of this TemporaryTableEditor's usage (ie: until .close() is called)
+        lifetime of this `TemporaryTableEditor` instance's usage (ie: until
+        `.close()` is called)
         """
         if self.status == TemporaryTableEditorStatus.OPENED:
             raise StatusError("Already in an opened state")
