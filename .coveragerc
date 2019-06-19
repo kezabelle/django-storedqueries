@@ -1,0 +1,18 @@
+[run]
+source = storedqueries
+omit =
+    storedqueries/tests/*
+branch = True
+data_file = .coverage
+timid = False
+
+[report]
+exclude_lines =
+    pragma: no cover
+precision = 0
+show_missing = True
+omit =
+    storedqueries/tests/*
+
+[xml]
+output = coverage.xml

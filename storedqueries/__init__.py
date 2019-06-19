@@ -26,8 +26,22 @@ from django.db.models.query import QuerySet
 from django.db.models.sql.compiler import SQLCompiler
 from enum import Enum
 
+VERSION = "0.1.0"
+__version_info__ = VERSION
+__version__ = VERSION
+version = VERSION
+__all__ = [
+    "TemporaryTable",
+    "TemporaryTableEditor",
+    "temporary_table",
+    "StatusError",
+    "version",
+    "get_version",
+]
 
-__all__ = ["TemporaryTable", "TemporaryTableEditor", "temporary_table", "StatusError"]
+
+def get_version():
+    return tuple(int(x) for x in version.split("."))
 
 
 class TemporaryTable(object):
@@ -225,7 +239,7 @@ class TemporaryTableEditor(object):
         if model_class is None:
             raise ImproperlyConfigured(
                 "target_model() for {obj!r} returned None; did you forget to set model = ... or override the method?".format(
-                    obj=temporary_table,
+                    obj=temporary_table
                 )
             )
         if not model_class._meta.abstract:
@@ -243,13 +257,13 @@ class TemporaryTableEditor(object):
         if not self.temporary_table.target_name():
             raise ImproperlyConfigured(
                 "target_name() for {obj!r} was falsy, did you forget to set name = '...' or override the method?".format(
-                    obj=temporary_table,
+                    obj=temporary_table
                 )
             )
         if self.temporary_table.source_queryset() is None:
             raise ImproperlyConfigured(
                 "source_queryset() for {obj!r} returned None, did you forget to set queryset = ... or override the method?".format(
-                    obj=temporary_table,
+                    obj=temporary_table
                 )
             )
         self.status = TemporaryTableEditorStatus.UNKNOWN
