@@ -224,8 +224,8 @@ class TemporaryTableEditor(object):
         model_class = self.temporary_table.target_model()
         if model_class is None:
             raise ImproperlyConfigured(
-                "target_model() for {mod!s}.{cls!s} returned None; did you forget to set model = ... or override the method?".format(
-                    mod=model_class.__module__, cls=model_class.__name__
+                "target_model() for {obj!r} returned None; did you forget to set model = ... or override the method?".format(
+                    obj=temporary_table,
                 )
             )
         if not model_class._meta.abstract:
@@ -242,14 +242,14 @@ class TemporaryTableEditor(object):
             )
         if not self.temporary_table.target_name():
             raise ImproperlyConfigured(
-                "target_name() for {mod!s}.{cls!s} was falsy, did you forget to set name = '...' or override the method?".format(
-                    mod=model_class.__module__, cls=model_class.__name__
+                "target_name() for {obj!r} was falsy, did you forget to set name = '...' or override the method?".format(
+                    obj=temporary_table,
                 )
             )
         if self.temporary_table.source_queryset() is None:
             raise ImproperlyConfigured(
-                "source_queryset() for {mod!s}.{cls!s} returned None, did you forget to set queryset = ... or override the method?".format(
-                    mod=model_class.__module__, cls=model_class.__name__
+                "source_queryset() for {obj!r} returned None, did you forget to set queryset = ... or override the method?".format(
+                    obj=temporary_table,
                 )
             )
         self.status = TemporaryTableEditorStatus.UNKNOWN
