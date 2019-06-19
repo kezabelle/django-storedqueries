@@ -3,16 +3,28 @@ from __future__ import unicode_literals, absolute_import
 from collections import namedtuple
 
 from django.core.exceptions import ImproperlyConfigured
-from django.db.backends.base.base import BaseDatabaseWrapper
-from django.db.backends.base.schema import BaseDatabaseSchemaEditor
-from django.db.models import Model, QuerySet
-from django.db.models.sql.compiler import SQLCompiler
-from enum import Enum
+from django.core.management.color import no_style
 
 try:
-    from typing import Optional, Text, Type
+    from typing import Optional, Text, Type, TYPE_CHECKING
 except ImportError:
-    pass
+    TYPE_CHECKING = False
+try:
+    from django.db.backends.base.base import BaseDatabaseWrapper
+except ImportError:
+    from django.db.backends import BaseDatabaseWrapper
+try:
+    PRE_MIGRATIONS = False
+    from django.db.backends.base.schema import BaseDatabaseSchemaEditor
+except ImportError:
+    PRE_MIGRATIONS = True
+    from django.db.backends.creation import BaseDatabaseCreation
+
+from django.db.models import Model
+from django.db.models.query import QuerySet
+
+from django.db.models.sql.compiler import SQLCompiler
+from enum import Enum
 
 
 __all__ = ["TemporaryTable", "TemporaryTableEditor", "temporary_table", "StatusError"]
@@ -111,12 +123,18 @@ class TemporaryTable(object):
 
 DatabaseSpecifics = namedtuple("DatabaseSpecifics", ("sql_create", "sql_drop"))
 PostgresSpecifics = DatabaseSpecifics(
+    # Postgres only allows for column *names*, not definitions, in the statement
     sql_create="CREATE TEMPORARY TABLE %(table)s AS (%(definition)s)",
+    # Boo hiss! Postgres doesn't like the word TEMPORARY to appear here
     sql_drop="DROP TABLE IF EXISTS %(table)s",
 )
 SqliteSpecifics = PostgresSpecifics
 MySqlSpecifics = DatabaseSpecifics(
-    sql_create="CREATE TEMPORARY TABLE %(table)s AS (%(definition)s)",
+    # MySQL allows for the table definition to be provided as part of the statement
+    # Note also that setting ENGINE=MEMORY appears to be faster, but cannot
+    # have foreign keys or blob/text columns. Possibly that could be inferred
+    # from the target_model definition ...
+    sql_create="CREATE TEMPORARY TABLE %(table)s (%(table_def)s) AS (%(definition)s)",
     # Yay MySQL actually has the best/least-terrifying syntax!
     sql_drop="DROP TEMPORARY TABLE IF EXISTS %(table)s",
 )
@@ -271,7 +289,7 @@ class TemporaryTableEditor(object):
             # and precludes this temporary model going into the registered models
             # for this imaginary app label.
             abstract = True
-            managed = False
+            managed = True
             db_table = table_name
             app_label = fake_app
 
@@ -304,15 +322,53 @@ class TemporaryTableEditor(object):
         qs = self.temporary_table.source_queryset()
         compiler = qs.query.get_compiler(qs.db)  # type: SQLCompiler
         connection = compiler.connection  # type: BaseDatabaseWrapper
+
         alias = connection.vendor  # type: str
         sql_create, sql_drop = self.operations(alias)
         query, query_params = compiler.as_sql()
-        table = sql_create % dict(
-            table=connection.ops.quote_name(table_name), definition=query
-        )
 
-        schema_editor = connection.schema_editor()  # type: BaseDatabaseSchemaEditor
-        indexes = schema_editor._model_indexes_sql(model)
+        # Only MySQL has the ability to set the column definitions as part
+        # of a temporary table creation.
+        # https://www.sqlite.org/lang_createtable.html
+        # https://www.postgresql.org/docs/current/sql-createtableas.html
+        # https://dev.mysql.com/doc/refman/8.0/en/create-table.html
+        create_def = None
+        if "%(table_def)s" in sql_create:
+            if not PRE_MIGRATIONS:
+                schema_editor = (
+                    connection.schema_editor()
+                )  # type: BaseDatabaseSchemaEditor
+                column_sqls = []
+                for field in model._meta.fields:
+                    definition, params = schema_editor.column_sql(model, field)
+                    column_sqls.append(
+                        "%s %s" % (schema_editor.quote_name(field.column), definition)
+                    )
+                    # TODO: query params extension??
+                    if params:
+                        raise NotImplementedError(
+                            "default values aren't implemented yet ..."
+                        )
+                create_def = "\n".join(column_sqls)
+            else:
+                creator = connection.creation  # type:  BaseDatabaseCreation
+                data, refs = creator.sql_create_model(model, no_style())
+                # Get the field definitions, without "CREATE TABLE (...)"
+                create_def = data[0].partition("(")[2].rpartition(")")[0]
+
+        # Creating indexes may be expensive, but at least it's supported.
+        if not PRE_MIGRATIONS:
+            schema_editor = connection.schema_editor()  # type: BaseDatabaseSchemaEditor
+            indexes = schema_editor._model_indexes_sql(model)
+        else:
+            creator = connection.creation  # type:  BaseDatabaseCreation
+            indexes = creator.sql_indexes_for_model(model, no_style())
+
+        table = sql_create % dict(
+            table=connection.ops.quote_name(table_name),
+            definition=query,
+            table_def=create_def,
+        )
         with connection.cursor() as c:
             c.execute(table, query_params)
             if indexes:
