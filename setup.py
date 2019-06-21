@@ -22,7 +22,7 @@ def make_readme(root_path):
 LICENSE = "BSD License"
 URL = ""
 LONG_DESCRIPTION = "\r\n\r\n----\r\n\r\n".join(make_readme(HERE))
-SHORT_DESCRIPTION = ""
+SHORT_DESCRIPTION = "A small package for Django to ease the creation of temporary tables, based on model definitions and querysets"
 KEYWORDS = (
     "django",
     "orm",
