@@ -20,7 +20,7 @@ def make_readme(root_path):
                 yield f.read()
 
 LICENSE = "BSD License"
-URL = ""
+URL = "https://github.com/kezabelle/django-storedqueries"
 LONG_DESCRIPTION = "\r\n\r\n----\r\n\r\n".join(make_readme(HERE))
 SHORT_DESCRIPTION = "A small package for Django to ease the creation of temporary tables, based on model definitions and querysets"
 KEYWORDS = (
