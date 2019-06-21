@@ -1,7 +1,26 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals, absolute_import
 from collections import namedtuple
+from functools import partial
 
+try:
+    from django.apps import apps
+
+    get_models = partial(
+        apps.get_models,
+        include_auto_created=True,
+        include_deferred=True,
+        include_swapped=True,
+    )
+except ImportError:
+    from django.db.models import get_models as _get_models
+
+    get_models = partial(
+        _get_models,
+        include_auto_created=True,
+        include_deferred=True,
+        only_installed=False,
+    )
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management.color import no_style
 
@@ -142,7 +161,12 @@ PostgresSpecifics = DatabaseSpecifics(
     # Boo hiss! Postgres doesn't like the word TEMPORARY to appear here
     sql_drop="DROP TABLE IF EXISTS %(table)s",
 )
-SqliteSpecifics = PostgresSpecifics
+SqliteSpecifics = DatabaseSpecifics(
+    # SQLite doesn't want () around the select-stmt.
+    sql_create="CREATE TEMPORARY TABLE %(table)s AS %(definition)s",
+    # Boo hiss! SQLite doesn't like the word TEMPORARY to appear here
+    sql_drop="DROP TABLE IF EXISTS %(table)s",
+)
 MySqlSpecifics = DatabaseSpecifics(
     # MySQL allows for the table definition to be provided as part of the statement
     # Note also that setting ENGINE=MEMORY appears to be faster, but cannot
@@ -340,6 +364,18 @@ class TemporaryTableEditor(object):
         alias = connection.vendor  # type: str
         sql_create, sql_drop = self.operations(alias)
         query, query_params = compiler.as_sql()
+
+        # Only MySQL has an actually sane syntax for dropping tables which can
+        # potentially shadow actual proper tables to prevent data loss. So
+        # I'm just going to error if it shadows a known name otherwise.
+        if sql_drop[0:10] == "DROP TABLE":
+            model_tables = {x._meta.db_table for x in get_models()}
+            if table_name in model_tables:
+                raise ValueError(
+                    "{!r} returned '{!s}' from target_name(); this table name is already used by an actual Model, and shadowing other tables is currently not allowed for '{!s}' because the syntax for dropping temporary tables is the same as normal tables".format(
+                        type(self.temporary_table), table_name, alias
+                    )
+                )
 
         # Only MySQL has the ability to set the column definitions as part
         # of a temporary table creation.
