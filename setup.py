@@ -44,7 +44,7 @@ setup(
     ],
     include_package_data=True,
     install_requires=[
-        "Django>=1.8",
+        "Django>=1.4",
     ],
     zip_safe=False,
     keywords=" ".join(KEYWORDS),
