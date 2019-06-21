@@ -44,7 +44,7 @@ from django.db.models.query import QuerySet
 
 from django.db.models.sql.compiler import SQLCompiler
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 __version_info__ = VERSION
 __version__ = VERSION
 version = VERSION

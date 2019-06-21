@@ -2,7 +2,7 @@ django-storedqueries
 ====================
 
 :author: Keryn Knight
-:version: 0.1.0
+:version: 0.1.1
 
 A small package for `Django`_ to ease the creation of database temporary tables.
 
