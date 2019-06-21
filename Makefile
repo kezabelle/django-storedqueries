@@ -3,6 +3,7 @@ help:
 	@echo "clean-pyc - get rid of dross files"
 	@echo "dist - build a distribution; calls test, clean-build and clean-pyc"
 	@echo "check - check the quality of the built distribution; calls dist for you"
+	@echo "patch - Update the version by patch"
 	@echo "release - register and upload to PyPI"
 
 clean-build:
@@ -29,12 +30,12 @@ check: dist
 	pyroma .
 	restview --long-description
 
-release:
-	@echo "INSTRUCTIONS:"
-	@echo "- pip install wheel twine"
-	@echo "- python setup.py sdist bdist_wheel"
-	@echo "- ls dist/"
-	@echo "- twine register dist/???"
-	@echo "- twine upload dist/*"
+patch: clean-build clean-pyc
+	pip install bumpversion
+	bumpversion patch
+
+release: patch dist
+	pip install wheel twine
+	twine upload dist/*
 
 
