@@ -330,9 +330,10 @@ class TemporaryTableEditor(object):
             db_table = table_name
             app_label = fake_app
 
+        # noinspection PyTypeChecker
         model_cls = type(
             fake_model_name, (klass,), {"Meta": Meta, "__module__": fake_app}
-        )
+        )  # type: Type[Model]
         # `Model.__new__` has been called, and now we have our type, but it's
         # incomplete and won't work if it remains abstract, and it needs to
         # be prepared postfix manually to avoid going into the registered models
@@ -400,17 +401,17 @@ class TemporaryTableEditor(object):
                         )
                 create_def = "\n".join(column_sqls)
             else:
-                creator = connection.creation  # type:  BaseDatabaseCreation
+                creator = connection.creation  # type: BaseDatabaseCreation
                 data, refs = creator.sql_create_model(model, no_style())
                 # Get the field definitions, without "CREATE TABLE (...)"
                 create_def = data[0].partition("(")[2].rpartition(")")[0]
 
         # Creating indexes may be expensive, but at least it's supported.
         if not PRE_MIGRATIONS:
-            schema_editor = connection.schema_editor()  # type: BaseDatabaseSchemaEditor
+            schema_editor = connection.schema_editor()
             indexes = schema_editor._model_indexes_sql(model)
         else:
-            creator = connection.creation  # type:  BaseDatabaseCreation
+            creator = connection.creation
             indexes = creator.sql_indexes_for_model(model, no_style())
 
         table = sql_create % dict(
