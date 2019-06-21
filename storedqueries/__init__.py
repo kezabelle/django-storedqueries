@@ -43,7 +43,6 @@ from django.db.models import Model
 from django.db.models.query import QuerySet
 
 from django.db.models.sql.compiler import SQLCompiler
-from enum import Enum
 
 VERSION = "0.1.0"
 __version_info__ = VERSION
@@ -178,7 +177,7 @@ MySqlSpecifics = DatabaseSpecifics(
 )
 
 
-class TemporaryTableEditorStatus(Enum):
+class TemporaryTableEditorStatus(object):
     UNKNOWN = 1
     OPENED = 2
     CLOSED = 3
