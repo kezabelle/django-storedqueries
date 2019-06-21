@@ -236,7 +236,7 @@ class TemporaryTableEditor(object):
 
     __slots__ = ("temporary_table", "status")
 
-    def __init__(self, temporary_table):
+    def __init__(self, tmp_tbl):
         # type: (TemporaryTable) -> None
         """
         Accepts a TemporaryTable or anything which implements:
@@ -258,12 +258,12 @@ class TemporaryTableEditor(object):
         once I establish more use cases. It's possible they'll also turn into
         properties if no more dynamic requirements turn up.
         """
-        self.temporary_table = temporary_table
+        self.temporary_table = tmp_tbl
         model_class = self.temporary_table.target_model()
         if model_class is None:
             raise ImproperlyConfigured(
                 "target_model() for {obj!r} returned None; did you forget to set model = ... or override the method?".format(
-                    obj=temporary_table
+                    obj=tmp_tbl
                 )
             )
         if not model_class._meta.abstract:
@@ -281,13 +281,13 @@ class TemporaryTableEditor(object):
         if not self.temporary_table.target_name():
             raise ImproperlyConfigured(
                 "target_name() for {obj!r} was falsy, did you forget to set name = '...' or override the method?".format(
-                    obj=temporary_table
+                    obj=tmp_tbl
                 )
             )
         if self.temporary_table.source_queryset() is None:
             raise ImproperlyConfigured(
                 "source_queryset() for {obj!r} returned None, did you forget to set queryset = ... or override the method?".format(
-                    obj=temporary_table
+                    obj=tmp_tbl
                 )
             )
         self.status = TemporaryTableEditorStatus.UNKNOWN
