@@ -171,7 +171,7 @@ MySqlSpecifics = DatabaseSpecifics(
     # Note also that setting ENGINE=MEMORY appears to be faster, but cannot
     # have foreign keys or blob/text columns. Possibly that could be inferred
     # from the target_model definition ...
-    sql_create="CREATE TEMPORARY TABLE %(table)s (%(table_def)s) AS (%(definition)s)",
+    sql_create="CREATE TEMPORARY TABLE %(table)s (%(table_def)s) ENGINE='%(mysql_engine)s' AS (%(definition)s)",
     # Yay MySQL actually has the best/least-terrifying syntax!
     sql_drop="DROP TEMPORARY TABLE IF EXISTS %(table)s",
 )
@@ -377,12 +377,33 @@ class TemporaryTableEditor(object):
                     )
                 )
 
+        # If using MySQL, it can specify a preferred "ENGINE" to use. Ideally
+        # we'd want to use MEMORY, but that only works for things which
+        # don't include like like blob/text
+        # https://dev.mysql.com/doc/refman/8.0/en/memory-storage-engine.html#memory-storage-engine-characteristics-of-memory-tables
+        mysql_engine = "MEMORY"
+        if "%(mysql_engine)s" in sql_create:
+            field_types = (x.db_type(connection) for x in model._meta.fields)
+            unsupported_types = {
+                "tinyblob",
+                "blob",
+                "mediumblob",
+                "longblob",
+                "tinytext",
+                "text",
+                "mediumtext",
+                "longtext",
+            }
+            bad_types = (x in unsupported_types for x in field_types)
+            if any(bad_types):
+                mysql_engine = "DEFAULT"
+
         # Only MySQL has the ability to set the column definitions as part
         # of a temporary table creation.
         # https://www.sqlite.org/lang_createtable.html
         # https://www.postgresql.org/docs/current/sql-createtableas.html
         # https://dev.mysql.com/doc/refman/8.0/en/create-table.html
-        create_def = None
+        create_def = None  # type: Optional[str]
         if "%(table_def)s" in sql_create:
             if not PRE_MIGRATIONS:
                 schema_editor = (
@@ -418,6 +439,7 @@ class TemporaryTableEditor(object):
             table=connection.ops.quote_name(table_name),
             definition=query,
             table_def=create_def,
+            mysql_engine=mysql_engine,
         )
         with connection.cursor() as c:
             c.execute(table, query_params)
