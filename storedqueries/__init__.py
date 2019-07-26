@@ -277,6 +277,17 @@ class TemporaryTableEditor(object):
                     mod=model_class.__module__, cls=model_class.__name__
                 )
             )
+        hidden_related = {
+            x.rel.is_hidden()
+            for x in model_class._meta.fields
+            if getattr(x, "rel", None) is not None
+        }
+        if not all(hidden_related):
+            raise ImproperlyConfigured(
+                "{mod!s}.{cls!s} must have related_name='+' for any related fields (ForeignKeys, etc)".format(
+                    mod=model_class.__module__, cls=model_class.__name__
+                )
+            )
         if not self.temporary_table.target_name():
             raise ImproperlyConfigured(
                 "target_name() for {obj!r} was falsy, did you forget to set name = '...' or override the method?".format(
