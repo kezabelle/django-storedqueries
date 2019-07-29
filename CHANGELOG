@@ -1,7 +1,6 @@
 Change history for django-storedqueries
 -------------------------------------------------------------
-
-?next?
+0.1.3
 ^^^^^^
 
 * Raise an exception at runtime if the temporary model being passed in delares ``ForeignKey`` etc without setting ``related_name="+"`` for each.

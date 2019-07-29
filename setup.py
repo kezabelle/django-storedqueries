@@ -32,7 +32,7 @@ KEYWORDS = (
 
 setup(
     name="django-storedqueries",
-    version="0.1.2",
+    version="0.1.3",
     author="Keryn Knight",
     author_email="django-storedqueries@kerynknight.com",
     maintainer="Keryn Knight",
