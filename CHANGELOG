@@ -1,5 +1,12 @@
 Change history for django-storedqueries
 -------------------------------------------------------------
+
+?next?
+^^^^^^
+
+* Raise an exception at runtime if the temporary model being passed in delares ``ForeignKey`` etc without setting ``related_name="+"`` for each.
+* Add functionality for MySQL to detect if it can use the ``MEMORY`` engine.
+
 0.1.2
 ^^^^^^
 * Initial release
