@@ -1,5 +1,11 @@
 Change history for django-storedqueries
 -------------------------------------------------------------
+
+?next?
+^^^^^^
+
+* Changed the ``open`` and ``close`` methods of ``TemporaryTableEditor`` to avoid using the cursor as a context manager for greater compatibility (ie: I have an old internal project where this could be useful)
+
 0.1.3
 ^^^^^^
 

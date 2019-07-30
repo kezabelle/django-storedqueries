@@ -452,11 +452,17 @@ class TemporaryTableEditor(object):
             table_def=create_def,
             mysql_engine=mysql_engine,
         )
-        with connection.cursor() as c:
-            c.execute(table, query_params)
+        cursor = connection.cursor()
+        try:
+            cursor.execute(table, query_params)
             if indexes:
                 for index in indexes:
-                    c.execute(index)
+                    cursor.execute(index)
+        finally:
+            if hasattr(cursor, "__exit__"):
+                cursor.__exit__(None, None, None)
+            else:
+                cursor.close()
         self.status = TemporaryTableEditorStatus.OPENED
         return self.temporary_model()
 
@@ -475,8 +481,14 @@ class TemporaryTableEditor(object):
         alias = connection.vendor  # type: str
         sql_create, sql_drop = self.operations(alias)
         table = sql_drop % dict(table=compiler.connection.ops.quote_name(table_name))
-        with connection.cursor() as c:
-            c.execute(table)
+        cursor = connection.cursor()
+        try:
+            cursor.execute(table)
+        finally:
+            if hasattr(cursor, "__exit__"):
+                cursor.__exit__(None, None, None)
+            else:
+                cursor.close()
         self.status = TemporaryTableEditorStatus.CLOSED
         return self.status
 
