@@ -392,6 +392,15 @@ class TemporaryTableEditor(object):
         # we'd want to use MEMORY, but that only works for things which
         # don't include like like blob/text
         # https://dev.mysql.com/doc/refman/8.0/en/memory-storage-engine.html#memory-storage-engine-characteristics-of-memory-tables
+        # Note: So mysql's ability to keep temporary tables in memory is governed
+        # by the following ...
+        # https://dev.mysql.com/doc/refman/8.0/en/server-system-variables.html#sysvar_max_heap_table_size
+        # https://dev.mysql.com/doc/refman/8.0/en/server-system-variables.html#sysvar_tmp_table_size
+        # See the bottom of this page for further reference...
+        # https://dev.mysql.com/doc/refman/8.0/en/table-size-limit.html
+        # Ultimately, using memory may be a bad choice for unbounded resultsets
+        # because it doesn't spill over to disk if you specify the ENGINE=MEMORY
+        # but without specifying, I can't seem to force it to prefer memory ...
         mysql_engine = "MEMORY"
         if "%(mysql_engine)s" in sql_create:
             field_types = (x.db_type(connection) for x in model._meta.fields)
