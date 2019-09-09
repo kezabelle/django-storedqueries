@@ -45,6 +45,7 @@ setup(
     include_package_data=True,
     install_requires=[
         "Django>=1.4",
+        'funcsigs;python_version<"3"'
     ],
     zip_safe=False,
     keywords=" ".join(KEYWORDS),

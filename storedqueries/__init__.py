@@ -4,14 +4,34 @@ from collections import namedtuple
 from functools import partial
 
 try:
+    from inspect import signature
+except ImportError:
+    from funcsigs import signature
+
+try:
     from django.apps import apps
 
-    get_models = partial(
-        apps.get_models,
-        include_auto_created=True,
-        include_deferred=True,
-        include_swapped=True,
-    )
+    sig = signature(apps.get_models)
+    params = set(sig.parameters)
+    if params == {"include_auto_created", "include_swapped"}:
+        get_models = partial(
+            apps.get_models, include_auto_created=True, include_swapped=True
+        )
+    elif params == {"include_auto_created", "include_swapped", "include_deferred"}:
+        get_models = partial(
+            apps.get_models,
+            include_auto_created=True,
+            include_deferred=True,
+            include_swapped=True,
+        )
+    else:
+
+        def get_models():
+            raise NotImplementedError(
+                "Unexpected parameters for django.apps.apps.get_models"
+            )
+
+
 except ImportError:
     from django.db.models import get_models as _get_models
 

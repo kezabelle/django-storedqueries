@@ -1,5 +1,11 @@
 Change history for django-storedqueries
 -------------------------------------------------------------
+
+?next?
+^^^^^^
+
+* Fix an issue where ``get_models()`` takes 3 parameters in older Django, rather than the 2 for 1.11 onwards - ``include_deferred`` was removed.  Introduces a dependency on the ``funcsigs`` package for python2.
+
 0.1.4
 ^^^^^^
 
